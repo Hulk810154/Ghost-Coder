@@ -8,11 +8,22 @@ def extract_function_name(doc) -> str:
     """
     Extracts a function name from a spaCy doc.
     """
+    verb = None
+    dobj = None
     for token in doc:
-        if token.pos_ == "VERB":
+        if token.pos_ == "VERB" and verb is None:
+            verb = token
             for child in token.children:
-                if child.dep_ == "dobj" and (child.pos_ == "NOUN" or child.pos_ == "PROPN"):
-                    return f"{token.lemma_}_{child.lemma_}"
+                if child.dep_ == "dobj":
+                    dobj = child
+                    break  # assume first dobj
+
+    if verb:
+        if dobj and dobj.pos_ == "NOUN":
+            return f"{verb.lemma_}_{dobj.lemma_}"
+        else:
+            return verb.lemma_
+
     return "my_function"
 
 def extract_arguments(doc, function_name) -> list[str]:
@@ -20,16 +31,17 @@ def extract_arguments(doc, function_name) -> list[str]:
     Extracts function arguments from a spaCy doc.
     """
     args = []
-    # A better rule: find nouns, proper nouns, or pronouns that are objects of prepositions
     for token in doc:
-        if (token.pos_ in ["NOUN", "PROPN", "PRON"]) and token.dep_ == "pobj":
-            if token.head.pos_ == "ADP": # Preposition
+        # Arguments can be direct objects or objects of prepositions
+        if token.dep_ in ["dobj", "pobj"]:
+            if token.pos_ in ["NOUN", "PROPN", "PRON"]:
+                # Avoid including parts of the function name as arguments
                 if token.lemma_ not in function_name:
                     args.append(token.lemma_)
-                    # Check for conjunctions
-                    for child in token.children:
-                        if child.dep_ == "conj":
-                            args.append(child.lemma_)
+        # Check for conjunctions (e.g., "x and y")
+        if token.dep_ == "conj" and token.head.dep_ in ["dobj", "pobj"]:
+             if token.lemma_ not in function_name:
+                    args.append(token.lemma_)
 
     # A simple rule for variable names like 'x' or 'y'
     for token in doc:

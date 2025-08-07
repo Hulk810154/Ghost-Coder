@@ -38,5 +38,17 @@ class TestCodeGenerator(unittest.TestCase):
             expected_code.strip()
         )
 
+    def test_generate_multiplication_function(self):
+        description = "a function that multiplies a by b"
+        expected_code = '''def multiply(a, b):
+    """
+    a function that multiplies a by b
+    """
+    return a * b'''
+        self.assertEqual(
+            generate_function_from_description(description).strip(),
+            expected_code.strip()
+        )
+
 if __name__ == '__main__':
     unittest.main()
