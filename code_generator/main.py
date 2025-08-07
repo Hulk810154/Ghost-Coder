@@ -1,16 +1,86 @@
 import argparse
+import spacy
+
+# Load the spaCy model
+nlp = spacy.load("en_core_web_sm")
+
+def extract_function_name(doc) -> str:
+    """
+    Extracts a function name from a spaCy doc.
+    """
+    for token in doc:
+        if token.pos_ == "VERB":
+            for child in token.children:
+                if child.dep_ == "dobj" and (child.pos_ == "NOUN" or child.pos_ == "PROPN"):
+                    return f"{token.lemma_}_{child.lemma_}"
+    return "my_function"
+
+def extract_arguments(doc, function_name) -> list[str]:
+    """
+    Extracts function arguments from a spaCy doc.
+    """
+    args = []
+    # A better rule: find nouns, proper nouns, or pronouns that are objects of prepositions
+    for token in doc:
+        if (token.pos_ in ["NOUN", "PROPN", "PRON"]) and token.dep_ == "pobj":
+            if token.head.pos_ == "ADP": # Preposition
+                if token.lemma_ not in function_name:
+                    args.append(token.lemma_)
+                    # Check for conjunctions
+                    for child in token.children:
+                        if child.dep_ == "conj":
+                            args.append(child.lemma_)
+
+    # A simple rule for variable names like 'x' or 'y'
+    for token in doc:
+        if (token.pos_ in ["NOUN", "PROPN", "PRON"]) and token.is_alpha and len(token.text) == 1:
+            if token.lemma_ not in args:
+                args.append(token.lemma_)
+
+    # Remove duplicates and return
+    return list(dict.fromkeys(args))
+
+def generate_body(doc, args: list[str]) -> str:
+    """
+    Generates the function body based on keywords in the description.
+    """
+    lemmas = [token.lemma_ for token in doc]
+    if "add" in lemmas or "sum" in lemmas:
+        if len(args) >= 2:
+            return f"    return {args[0]} + {args[1]}"
+    if "subtract" in lemmas or "difference" in lemmas:
+        if len(args) >= 2:
+            return f"    return {args[0]} - {args[1]}"
+    if "multiply" in lemmas or "product" in lemmas:
+        if len(args) >= 2:
+            return f"    return {args[0]} * {args[1]}"
+    if "divide" in lemmas or "quotient" in lemmas:
+        if len(args) >= 2:
+            return f"    return {args[0]} / {args[1]}"
+    return "    pass"
 
 def generate_function_from_description(description: str) -> str:
     """
     Generates a Python function from a natural language description.
     """
-    function_template = '''def my_function():
+    doc = nlp(description)
+    function_name = extract_function_name(doc)
+    arguments = extract_arguments(doc, function_name)
+    args_string = ", ".join(arguments)
+    body = generate_body(doc, arguments)
+
+    function_template = '''def {function_name}({args_string}):
     """
     {description}
     """
-    pass
+{body}
 '''
-    return function_template.format(description=description)
+    return function_template.format(
+        function_name=function_name,
+        args_string=args_string,
+        description=description,
+        body=body
+    )
 
 def main():
     """
